@@ -66,7 +66,6 @@ def get_indicator(data):
             data.iloc[i,1].append("P")
     return data
 
-# PUTree LIME split selection
 def gain(a,data):
     a["left"]=0
     a["right"]=0

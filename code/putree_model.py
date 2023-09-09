@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 import lime.lime_tabular as lime_tabular
 import lime.submodular_pick as submodular_pick
+from mask_recovery import augment_data, mask_data
 import torch
 import pu_model
 import random
@@ -21,8 +22,11 @@ from sklearn.base import BaseEstimator
 from train_pu import train_pu_model
 from PULIME import get_split, gain, get_train_test
 from pi_estimation import general_pi, actual_pi, rank_pi
-from ggg import model_fusion, emb_pu,GMUFusion
+from fusion_train import model_fusion, emb_pu,GMUFusion
 from mask_recovery import augment_data
+import networkx as nx
+import matplotlib.pyplot as plt
+import graphviz
 
 
 class Node:
@@ -30,19 +34,20 @@ class Node:
         """
         Node class to represent nodes in the decision tree.
 
-        Args:
+        Attributes:
         - k (int): A unique identifier for this node.
         - D (DataFrame): The data associated with this node.
         - M (model): The nnPU model trained on the data D.
         - f (str): The feature used for splitting the data at this node.
         - t (float): The threshold used for splitting the data at this node.
+        - prior (float): The prior probability for positive class estimation.
         - is_root (bool): Whether the node is the root node or not.
         - sibling (Node): The sibling node.
-        - test_data : test data on node
-        - depth : depth of node in tree
-
+        - test_data (DataFrame): Test data associated with this node.
+        - depth (int): The depth of the node in the decision tree.
+        - path_fusion_id (list): List of path fusion model identifiers associated with this node.
+        - actual_p (float): The actual positive class prior for the node's data.
         """
-
         self.k = k
         self.D = D
         self.M = M
@@ -60,20 +65,31 @@ class Node:
 
 
 class PUTreeClassifier(BaseEstimator):
-    def __init__(self, max_depth=None, min_node_size=None,mask_d=None, alpha=None, b=None, lambd_best=None, p_best=None, top_f = None,device = "cpu",fusion_epoch=30,pu_epoch = 10,pi_selection = "gt",bet = 0,local_bet=0,aug=True):
+    def __init__(self, max_depth=None, min_node_size=None,mask_d=None, alpha=None, b=None, lambd_best=None, p_best=None, top_f = None,device = "cpu",fusion_epoch=30,pu_epoch = 10,pi_selection = "gt",bet = 0,local_bet=0,aug=False,fus = False,save_path = "putree.png"):
         """
-        PUTreeClassifier class for Positive-Unlabeled decision tree.
+        PUTreeClassifier class for Positive-Unlabeled tree.
 
         Attributes:
-        - root (Node): The root node of the decision tree.
+        - root (Node): The root node of the  PUtree.
         - T (dict): The dictionary of path fusion models, keyed by the path node k.
-        - mask_d: root node mask_recovery generator
-        - alpha : ..
-        - b: ..
-        - lambd_best: ..
-        - p_best: ..
-        - top_f: ..
+        - mask_d (DataFrame): The root node mask recovery generator.
+        - alpha (float): Alpha parameter.
+        - b (float): Beta parameter.
+        - lambd_best (float): Lambda parameter.
+        - p_best (float): P parameter.
+        - top_f (int): Top features parameter.
+        - device (str): Device for training, either "cpu" or "gpu" (default: "cpu").
+        - fusion_epoch (int): Number of fusion training epochs (default: 30).
+        - pu_epoch (int): Number of PU model training epochs (default: 10).
+        - pi_selection (str): Positive class prior selection method ("gt", "gen", or "rk"). Meaning ground truth, general method, rankpruning.
+        - bet (float): Beta parameter for model fusion.
+        - local_bet (float): Local beta parameter for PU model training.
+        - aug (bool): Flag to enable data augmentation (default: False).
+        - fus (bool): Flag to enable model fusion (default: False).
+        - save_path (str): File path to save the PUtree visualization (default: "putree.png").
+        - dataset (str): The dataset being used, either "unsw", "nsl", or "diabetes" (default: "unsw").
         """
+
         self.root = None
         self.T = {}
         self.max_depth = max_depth
@@ -91,15 +107,34 @@ class PUTreeClassifier(BaseEstimator):
         self.bet = bet
         self.local_bet = local_bet
         self.aug = aug
+        self.fus = fus
+        self.save_path = save_path
         
-    def fit(self, D,prior,test_data):
+    def fit(self, D,test_data):
         """
         Train the PUTreeClassifier.
 
         Args:
         - D (DataFrame): The training data.
         """
+        if self.pi_selection=="gt":
+            prior = actual_pi(D)
+        elif self.pi_selection=="gen":
+            prior = general_pi(D)
+        elif selft.pi_selection=="rk":
+            prior = rank_pi(D)
         self.root = Node(k=0, D=D,prior=prior, M=self.build_nnPU_model(D,prior).to(self.device), is_root= True,test_data=test_data, depth =0,actual_p=prior)
+        if self.aug:
+            mask_d, mask_l,top_f= mask_data(self.root.D,self.root.test_data,self.root.M.to("cpu"))
+            gamma_best, lambd_best, p_best, MSE_best, predictY_best = GridMLSSVR(mask_d,mask_l,5)
+            alpha, b = MLSSVRTrain(mask_d, mask_l, gamma_best, lambd_best, p_best)
+            self.mask_d = mask_d
+            self.alpha = alpha
+            self.b = b
+            self.lambd_best= lambd_best
+            self.p_best = p_best
+            self.top_f = top_f
+        
         self.learn_PUTree(self.root)
 
     def learn_PUTree(self, node,depth=0,upper_model = None):
@@ -276,8 +311,10 @@ class PUTreeClassifier(BaseEstimator):
         if len(path_model)==1:
             fusion = self.root.M.to(self.device)
         else:
-            #fusion = model_fusion(path_model, X_train, y_train,X_test, y_test,num_epochs = self.fusion_epoch,prior=node_build.actual_p,nnpu= True,device = self.device,bet = self.bet)
-            fusion = path_model[-1].to(self.device)
+            if self.fus:
+                fusion = model_fusion(path_model, X_train, y_train,X_test, y_test,num_epochs = self.fusion_epoch,prior=node_build.actual_p,nnpu= True,device = self.device,bet = self.bet)
+            else:
+                fusion = path_model[-1].to(self.device)
         return fusion
 
     def PUTreeLIME(self, node):
@@ -448,3 +485,50 @@ class PUTreeClassifier(BaseEstimator):
         - (Node or None): The node with the specified k value, or None if not found.
         """
         return self._traverse_tree(self.root, k)
+
+    def draw_PUTree(self):
+        """
+        Recursively draw the PUTree and display node information in a tree structure.
+
+        Args:
+        - node (Node): The current node in the PUTree.
+        - save_path (str): The file path to save the PNG image.
+        """
+        node = self.root
+        save_path = self.save_path
+
+        def traverse_tree(current_node, x, y, level):
+            if current_node is None:
+                return
+
+            # Calculate node position
+            node_x = x
+            node_y = y
+
+            # Draw the node
+            plt.text(node_x, node_y, f"Node {current_node.k}\nDepth: {current_node.depth}\nSamples: {len(current_node.D)}\nClass Prior: {current_node.prior}\nActual Prior: {current_node.actual_p}\nPath_fusion_id: {current_node.path_fusion_id}\nSibling: {'Node ' + str(current_node.sibling.k) if current_node.sibling is not None else 'None'}\nFeature: {current_node.f}\nThreshold: {current_node.t}",
+                    ha='center', va='center', bbox=dict(boxstyle='round,pad=0.3', edgecolor='blue', facecolor='lightblue'))
+
+            # Draw edges to child nodes
+            if current_node.left is not None:
+                child_x_left = x + 3 / (2 ** level)
+                child_y_left = y - 3
+                plt.plot([node_x, child_x_left], [node_y, child_y_left], color='gray', linestyle='-', linewidth=2)
+                traverse_tree(current_node.left, child_x_left, child_y_left, level + 1)
+
+            if current_node.right is not None:
+                child_x_right = x - 3 / (2 ** level)
+                child_y_right = y - 3
+                plt.plot([node_x, child_x_right], [node_y, child_y_right], color='gray', linestyle='-', linewidth=2)
+                traverse_tree(current_node.right, child_x_right, child_y_right, level + 1)
+
+        # Create a figure and axis
+        fig, ax = plt.subplots(figsize=(20, 16))
+        ax.axis('off')  # Turn off axis
+
+        # Start drawing from the root node
+        traverse_tree(node, x=0, y=0, level=1)
+
+        # Save the figure
+        plt.savefig(save_path, format="png")
+        plt.show()

@@ -43,4 +43,4 @@ def rank_pi(data):
     # rp.fit(X, s, positive_lb_threshold=1-frac_pos2neg, negative_ub_threshold=frac_neg2pos) 
     rp.fit(X, y)
     pi = (num/(1-rp.rh1)-num)/(X.shape[0]-num)
-    print(pi)
+    return pi
