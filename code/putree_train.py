@@ -33,7 +33,7 @@ import networkx as nx
 from sklearn.metrics import fbeta_score
 from sklearn.model_selection import GridSearchCV
 import argparse
-import graphviz
+
 
 def main(args):
     device = torch.device('cuda' if args.gpu else 'cpu')

@@ -26,7 +26,7 @@ from fusion_train import model_fusion, emb_pu,GMUFusion
 from mask_recovery import augment_data
 import networkx as nx
 import matplotlib.pyplot as plt
-import graphviz
+
 
 
 class Node:
