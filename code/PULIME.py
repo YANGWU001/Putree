@@ -1,5 +1,5 @@
-from lime import lime_tabular
-from lime import submodular_pick
+from putreelime import lime_tabular
+from putreelime import submodular_pick
 import numpy as np
 import pandas as pd
 

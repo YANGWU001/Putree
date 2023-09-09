@@ -11,8 +11,8 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
-import lime.lime_tabular as lime_tabular
-import lime.submodular_pick as submodular_pick
+import putreelime.lime_tabular as lime_tabular
+import putreelime.submodular_pick as submodular_pick
 import torch
 import pu_model
 from train_pu import train_pu_model
