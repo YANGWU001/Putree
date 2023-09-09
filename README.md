@@ -4,9 +4,12 @@
 This repository is the official implementation of PUtree and its variants.
 
 # Method
-Illustration of our proposed PUtree network. We provide an example using the red tree path to showcase the PUtree algorithm. Specifically, we focus on the process of splitting from node 𝑁𝑖 to node 𝑁𝑖+1 and the corresponding sibling node represented by 𝑆 (𝑁𝑖+1). Notably, when the red path extends to meet the termination criteria, hierarchical path fusion is conducted, seamlessly integrating information from the root to the leaf PU models.
+![toy_example](toy_example.jpeg)
+Figure 1: A toy example of diabetes diagnosis for PUtree algorithm. PUtree uses PUTreeLIME to select optimal splitting criteria, and then builds PU model on each community. Based on instances’ landing node, PUtree aggregates information on all the PU models on the path to make prediction.
 
 ![framework](framework.jpeg)
+Figure 2: Illustration of our proposed PUtree network. We provide an example using the red tree path to showcase the PUtree algorithm. Specifically, we focus on the process of splitting from node 𝑁𝑖 to node 𝑁𝑖+1 and the corresponding sibling node represented by 𝑆 (𝑁𝑖+1). Notably, when the red path extends to meet the termination criteria, hierarchical path fusion is conducted, seamlessly integrating information from the root to the leaf PU models.
+
 # Environment Set-up
 ```setup
 conda env create -n putree -f putree.yml
