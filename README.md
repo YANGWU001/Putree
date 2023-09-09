@@ -7,10 +7,10 @@ This repository is the official implementation of PUtree and its variants.
 Illustration of our proposed PUtree network. We provide an example using the red tree path to showcase the PUtree algorithm. Specifically, we focus on the process of splitting from node 𝑁𝑖 to node 𝑁𝑖+1 and the corresponding sibling node represented by 𝑆 (𝑁𝑖+1). Notably, when the red path extends to meet the termination criteria, hierarchical path fusion is conducted, seamlessly integrating information from the root to the leaf PU models.
 
 ![framework](framework.jpeg)
-# Set-up
-## Environment
+# Environment Set-up
 ```setup
 conda env create -n putree -f putree.yml
+conda activate putree
 
 ```
 # Training and Evaluation
